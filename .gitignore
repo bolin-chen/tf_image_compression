@@ -5,11 +5,11 @@ other/valid_encoded/
 other/valid_ori/
 other/test_img/
 
-log/
-summary/
-params/
-timeline/
-data_info/
+log/*
+summary/*
+params/*
+timeline/*
+data_info/*
 
 !log/.gitkeep
 !summary/.gitkeep
