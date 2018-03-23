@@ -14,7 +14,7 @@ params_for_test/*
 timeline/*
 data_info/*
 recons_data/*
-
+encoded_data/*
 
 !log/.gitkeep
 !summary/.gitkeep
@@ -23,3 +23,4 @@ recons_data/*
 !timeline/.gitkeep
 !data_info/.gitkeep
 !recons_data/.gitkeep
+!encoded_data/.gitkeep
