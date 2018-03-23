@@ -4,11 +4,6 @@ import argparse
 import os
 import tensorflow as tf
 
-from model_0 import model as model_0
-from model_1 import model as model_1
-from model_2 import model as model_2
-from model_3 import model as model_3
-
 
 def my_parse_args():
   parser = argparse.ArgumentParser()
@@ -82,12 +77,15 @@ if __name__ == '__main__':
   sess = tf.Session(config=config)
 
   if args.model_num == '0':
-    model_0.train(sess, args)
+    from model_0 import model
   elif args.model_num == '1':
-    model_1.train(sess, args)
+    from model_1 import model
   elif args.model_num == '2':
-    model_2.train(sess, args)
+    from model_2 import model
   elif args.model_num == '3':
-    model_3.train(sess, args)
+    from model_3 import model
+
+  model.train(sess, args)
+
 
 

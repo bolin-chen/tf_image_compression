@@ -7,7 +7,7 @@ from glob import glob
 
 # start = datetime.now()
 
-for image_file in glob('valid_encoded/*.jpg'):
+for image_file in glob('./valid_encoded/*.jpg'):
     Image.open(image_file).save(image_file[:-3] + 'png')
 
 # end = datetime.now()

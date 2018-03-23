@@ -1,0 +1,10 @@
+
+{
+  "name_sep": "@_@",
+  "resolution": 4096,
+  "patch_size": 128,
+
+  "learning_rate": 0.001,
+  "batch_size": 64,
+  "num_steps": 1000000
+}

@@ -3,6 +3,10 @@ import tensorflow as tf
 from tensorflow.python.client import timeline
 import logging
 import json
+import numpy as np
+from pathlib import Path
+
+patch_size = 128
 
 # https://github.com/ikhlestov/tensorflow_profiling/blob/master/03_merged_timeline_example.py
 class TimeLiner:
@@ -64,4 +68,97 @@ def show_variables(sess, variables):
 def add_trainable_variables_to_summary():
   for var in tf.trainable_variables():
     tf.summary.histogram(var.name, var)
+
+
+def read_image_list(data_list):
+  f = open(data_list, 'r')
+  image_paths = []
+  for line in f:
+    image = line.strip("\n")
+    image_paths.append(image)
+
+  return image_paths
+
+
+def restore_params(sess, args):
+  if args.params_file == '':
+    params_file = str(Path('.') / 'model_{}'.format(args.model_num) / 'params_for_test' / 'params')
+  else:
+    params_file = args.params_file
+
+  saver = tf.train.Saver()
+  saver.restore(sess, params_file)
+
+  print('Params in {} restored complete'.format(params_file))
+
+
+def crop_image_input_patches(image):
+  height, width, channel = image.shape
+
+  if height % patch_size != 0:
+    padding_height = patch_size - (height % patch_size)
+  else:
+    padding_height = 0
+
+  if width % patch_size != 0:
+    padding_width = patch_size - (width % patch_size)
+  else:
+    padding_width = int(0)
+
+  padded_image = np.pad(image, ((0, padding_height), (0, padding_width), (0, 0)), 'reflect')
+
+  padded_height, padded_width, channel = padded_image.shape
+  height_patch_num = padded_height // patch_size
+  width_patch_num = padded_width // patch_size
+
+  image_patches = []
+  for i in range(height_patch_num):
+    for j in range(width_patch_num):
+      image_patches.append(padded_image[i * patch_size : (i + 1) * patch_size, j * patch_size : (j + 1) * patch_size])
+
+
+  # print('image.shape: {}'.format(image.shape))
+  # print('padding_height: {}'.format(padding_height))
+  # print('padding_width: {}'.format(padding_width))
+  # print('padded_image.shape: {}'.format(padded_image.shape))
+  # print('height_patch_num: {}'.format(height_patch_num))
+  # print('width_patch_num: {}'.format(width_patch_num))
+  # print('len(image_patches): {}'.format(len(image_patches)))
+
+
+  return image_patches
+
+
+def concat_patches(patches, height, width):
+  if height % patch_size != 0:
+    height_patch_num = height // patch_size + 1
+  else:
+    height_patch_num = height // patch_size
+
+  if width % patch_size != 0:
+    width_patch_num = width // patch_size + 1
+  else:
+    width_patch_num = width // patch_size
+
+
+  # print('height_patch_num: {}'.format(height_patch_num))
+  # print('width_patch_num: {}'.format(width_patch_num))
+  # print('len(patches): {}'.format(len(patches)))
+
+  width_concated_patch_list = []
+  for i in range(height_patch_num):
+    width_concated_patch = np.concatenate(patches[i * width_patch_num : (i + 1) * width_patch_num], axis=1)
+    width_concated_patch_list.append(width_concated_patch)
+
+  # print('len(width_concated_patch_list): {}'.format(len(width_concated_patch_list)))
+
+  recons_image = np.concatenate(width_concated_patch_list, axis=0)
+
+  # print('recons_image.shape before crop: {}'.format(recons_image.shape))
+
+  recons_image = recons_image[: height, : width]
+
+  # print('recons_image.shape: {}'.format(recons_image.shape))
+
+  return recons_image
 
