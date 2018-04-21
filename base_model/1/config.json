@@ -1,0 +1,12 @@
+
+{
+  "name_sep": "@_@",
+  "resolution": 4096,
+  "patch_size": 128,
+  "quan_scale": 256,
+
+  "batch_size": 64,
+  "boundaries": [40000, 60000],
+  "lr_values": [0.001, 0.0001, 0.00001],
+  "num_steps": 60000
+}

@@ -1,0 +1,2 @@
+model_checkpoint_path: "/home/chenbolin/clic/model_0/params/params"
+all_model_checkpoint_paths: "/home/chenbolin/clic/model_0/params/params"
