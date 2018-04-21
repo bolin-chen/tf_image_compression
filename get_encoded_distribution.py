@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 import range_coder
 import json
+import importlib
 
 from utils import utils
 from data_loader import data_loader
@@ -56,7 +57,16 @@ def my_parse_args():
     '--data_list',
     help='File for data_list',
     type=str,
-    default='data_info/train_data_patch_list.txt'
+    default='data_info/train_data_patch_list_{}.txt'
+  )
+
+
+  parser.add_argument(
+    '-f',
+    '--model_file',
+    help='The model file used to calculate distribution',
+    type=str,
+    default='model_{}/params_for_test/model.py'
   )
 
   parser.add_argument(
@@ -64,7 +74,7 @@ def my_parse_args():
     '--output_file',
     help='File to keep encoded distribution info',
     type=str,
-    default='data_info/distribution_info.npy'
+    default='data_info/distribution_info_{}.npy'
   )
 
   args = parser.parse_args()
@@ -82,19 +92,26 @@ def get_distribution(sess, model, args):
 
   print(config)
 
-  data_list = args.data_list
+  patch_size = config['patch_size']
+  quan_scale = config['quan_scale']
+  # bottleneck_channel = config['bottleneck_channel']
+
+  data_list = args.data_list.format(patch_size)
 
   batch_size = 64
 
   patch_batch = data_loader.get_data_batch(data_list, batch_size)
 
-  patch_size = config['patch_size']
-  encoder_output_op = model.encoder(patch_batch, patch_size)
+
+
+  encoder_output_op = model.encoder(patch_batch, patch_size, quan_scale)
 
   utils.restore_params(sess, args)
 
-  freq = np.zeros(256)
-  bins = [i for i in range(256 + 1)]
+
+
+  freq = np.zeros(quan_scale)
+  bins = [i for i in range(quan_scale + 1)]
 
   # print(bins)
 
@@ -118,9 +135,24 @@ def get_distribution(sess, model, args):
 
   print(prob)
 
-  output_file = args.output_file
+  output_file = args.output_file.format(args.model_num)
+
   np.save(output_file, prob)
-  print('Prob disttribution save complete')
+
+  # i = 0
+  # while True:
+  #   if i == 0:
+  #     output_file = output_file[:-4] + '-{}.npy'.format(i)
+  #   else:
+  #     output_file = output_file[:-6] + '-{}.npy'.format(i)
+
+  #   if Path(output_file).is_file():
+  #     i += 1
+  #   else:
+  #     np.save(output_file, prob)
+  #     break
+
+  print('Prob disttribution saved to {} complete'.format(output_file))
 
 
 if __name__ == '__main__':
@@ -133,14 +165,21 @@ if __name__ == '__main__':
 
   sess = tf.Session(config=config)
 
-  if args.model_num == '0':
-    from model_0 import model
-  elif args.model_num == '1':
-    from model_1 import model
-  elif args.model_num == '2':
-    from model_2 import model
-  elif args.model_num == '3':
-    from model_3 import model
+  model_file = args.model_file.format(args.model_num)
+  module_name = model_file.replace('/', '.').replace('.py', '')
+
+  # print(Path(model_file).is_file())
+
+  model = importlib.import_module(module_name)
+
+  # if args.model_num == '0':
+  #   from model_0 import model
+  # elif args.model_num == '1':
+  #   from model_1 import model
+  # elif args.model_num == '2':
+  #   from model_2 import model
+  # elif args.model_num == '3':
+  #   from model_3 import model
 
   get_distribution(sess, model, args)
 

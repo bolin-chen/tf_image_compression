@@ -62,6 +62,66 @@ def my_parse_args():
     default='off'
   )
 
+  parser.add_argument(
+    '-o',
+    '--overload_log',
+    help='Whether to overload the previous log',
+    type=str,
+    choices=['on', 'off'],
+    default='on'
+  )
+
+  parser.add_argument(
+    '-a',
+    '--additional_param',
+    help='Additional parameter for searching hyperparameters',
+    type=str,
+    default='None'
+  )
+
+  parser.add_argument(
+    '-l',
+    '--load_ckpt',
+    help='Load previous ckpt',
+    type=str,
+    choices=['on', 'off'],
+    default='off'
+  )
+
+  parser.add_argument(
+    '-r',
+    '--reset_step',
+    help='Reset global step',
+    type=str,
+    choices=['on', 'off'],
+    default='off'
+  )
+
+  parser.add_argument(
+    '-x',
+    '--max_step',
+    help='Max step',
+    type=str,
+    default='None'
+  )
+
+  parser.add_argument(
+    '-b',
+    '--lr_and_bound',
+    help='Learning rate',
+    type=str,
+    default='None'
+  )
+
+  parser.add_argument(
+    '-f',
+    '--fine_tune',
+    help='Load params and fine tune',
+    type=str,
+    choices=['off', 'btnk', 'input'],
+    default='off'
+  )
+
   args = parser.parse_args()
 
   return args
@@ -86,6 +146,5 @@ if __name__ == '__main__':
     from model_3 import model
 
   model.train(sess, args)
-
 
 

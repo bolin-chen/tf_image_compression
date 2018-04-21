@@ -5,9 +5,7 @@ import os
 import tensorflow as tf
 from pathlib import Path
 import numpy as np
-# import cv2
-import scipy
-# import matplotlib.image as mpimg
+from skimage import io
 import range_coder
 import json
 import sys
@@ -62,7 +60,7 @@ def my_parse_args():
     '--input_dir',
     help='Directory for input compressed data',
     type=str,
-    default='encoded_data'
+    default='model_{}/encoded_data'
   )
 
   parser.add_argument(
@@ -70,7 +68,7 @@ def my_parse_args():
     '--output_dir',
     help='Directory for output uncompressed data',
     type=str,
-    default='recons_data'
+    default='model_{}/recons_data'
   )
 
   args = parser.parse_args()
@@ -78,9 +76,9 @@ def my_parse_args():
   return args
 
 
-def apply_range_decoder(seq_data_len, decodepath):
-  resolution = 4096
-  prob = np.load('data_info/distribution_info.npy' )
+def apply_range_decoder(seq_data_len, decodepath, args, config):
+  resolution = config['resolution']
+  prob = np.load('data_info/distribution_info_{}.npy'.format(args.model_num))
 
   # Avoid zero prob
   modified_freq = prob * resolution + 1
@@ -108,7 +106,7 @@ def get_img_info(filename, config):
 
   path_without_extension = filename.replace('.encoded', '')
 
-  img_info = path_without_extension.split(name_sep)[1]
+  img_info = path_without_extension.split(name_sep)[-1]
   [seq_data_len, height, width] = img_info.split('_')
   seq_data_len = int(seq_data_len)
   height = int(height)
@@ -120,12 +118,26 @@ def get_img_info(filename, config):
 def get_recons_image_path(filename, args, config):
   name_sep = config['name_sep']
 
-  output_dir = args.output_dir
+  output_dir = args.output_dir.format(args.model_num)
   filename_without_extension = filename.replace('.encoded', '')
   recons_filename = filename_without_extension.split(name_sep)[0] + '.png'
   recons_image_path = str(Path(output_dir) / recons_filename)
 
   return recons_image_path
+
+
+
+def get_encoded_shape(input_dir, config):
+  name_sep = config['name_sep']
+
+  sample_filename = os.listdir(input_dir)[0]
+  encoded_shape = sample_filename.split(name_sep)[1]
+  [encoded_height, encoded_width, encoded_channel] = encoded_shape.split('_')
+  encoded_height = int(encoded_height)
+  encoded_width = int(encoded_width)
+  encoded_channel = int(encoded_channel)
+
+  return encoded_height, encoded_width, encoded_channel
 
 
 def uncompress(sess, model, args):
@@ -138,17 +150,24 @@ def uncompress(sess, model, args):
 
   print(config)
 
+  patch_size = config['patch_size']
+
+  input_dir = args.input_dir.format(args.model_num)
+
+
+  encoded_height, encoded_width, encoded_channel = get_encoded_shape(input_dir, config)
+  patches_placeholder = tf.placeholder(tf.float32, shape=[None, encoded_height, encoded_width, encoded_channel])
+
+
   batch_size = 64
-  encoded_patch_size = 32
-  encoded_patch_channel = 32
-  patches_placeholder = tf.placeholder(tf.float32, shape=[None, encoded_patch_size, encoded_patch_size, encoded_patch_channel])
   patch_batch, iterator = data_loader.get_patch_batch(batch_size, patches_placeholder)
 
-  decoder_output_op = model.decoder(patch_batch)
+  quan_scale = config['quan_scale']
+
+  decoder_output_op = model.decoder(patch_batch, quan_scale)
 
   utils.restore_params(sess, args)
 
-  input_dir = args.input_dir
   for filename in os.listdir(input_dir):
 
     filepath = str(Path(input_dir) / filename)
@@ -160,7 +179,21 @@ def uncompress(sess, model, args):
     # print('height: {}'.format(height))
     # print('width: {}'.format(width))
 
-    seq_data = apply_range_decoder(seq_data_len, filepath)
+    seq_data = apply_range_decoder(seq_data_len, filepath, args, config)
+
+    # encoded_order = np.load('data_info/order_info_{}.npy'.format(args.model_num))
+    # decoded_order = [int(i) for i in sorted(range(len(encoded_order)), key=lambda k: encoded_order[k])]
+
+    # print(filepath)
+    # print(encoded_order.shape)
+    # print(len(seq_data))
+
+    # seq_data = np.asarray(seq_data).reshape(-1, encoded_height * encoded_width * encoded_channel)
+
+    # print('shape_1', seq_data.shape)
+    # print('shape_order', len(decoded_order))
+
+    # seq_data = [seq_data_item[decoded_order] for seq_data_item in seq_data]
 
     # print(seq_data[200 : 210])
     # print('-----')
@@ -169,7 +202,10 @@ def uncompress(sess, model, args):
     # print('len(seq_data): {}'.format(len(seq_data)))
 
     seq_data = np.asarray(seq_data).astype(np.float32)
-    encoded_patches = seq_data.reshape(-1, 32, 32, 32)
+
+    # print('shape_2', seq_data.shape)
+
+    encoded_patches = seq_data.reshape(-1, encoded_height, encoded_width, encoded_channel)
 
     # print('encoded_patches.shape: {}'.format(encoded_patches.shape))
 
@@ -192,9 +228,13 @@ def uncompress(sess, model, args):
 
     # print('decoded_patches.shape: {}'.format(decoded_patches.shape))
 
-    recons_image = utils.concat_patches(decoded_patches, height, width)
+    recons_image = utils.concat_patches(decoded_patches, height, width, patch_size)
 
     recons_image_path = get_recons_image_path(filename, args, config)
+
+    output_dir = args.output_dir.format(args.model_num)
+    if not os.path.exists(output_dir):
+      os.makedirs(output_dir)
 
     print('recons_image_path: {}'.format(recons_image_path))
     # print('recons_image.shape: {}'.format(recons_image.shape))
@@ -205,7 +245,10 @@ def uncompress(sess, model, args):
     # break
 
     # cv2.imwrite(recons_image_path, recons_image)
-    scipy.misc.imsave(recons_image_path, recons_image)
+
+    recons_image = np.around(recons_image).astype(np.uint8)
+
+    io.imsave(recons_image_path, recons_image)
     # mpimg.imsave(recons_image_path, recons_image)
 
     # print(recons_image[100 : 110, 500, 0])
@@ -244,5 +287,4 @@ if __name__ == '__main__':
     from model_3 import model
 
   uncompress(sess, model, args)
-
 

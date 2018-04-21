@@ -5,7 +5,7 @@ import os
 import tensorflow as tf
 from pathlib import Path
 import numpy as np
-import cv2
+from skimage import io
 import range_coder
 import json
 
@@ -65,7 +65,7 @@ def my_parse_args():
     '--output_dir',
     help='Directory for output compressed data',
     type=str,
-    default='encoded_data'
+    default='model_{}/encoded_data'
   )
 
   args = parser.parse_args()
@@ -73,9 +73,9 @@ def my_parse_args():
   return args
 
 
-def apply_range_encoder(seq_data, encodepath, config):
+def apply_range_encoder(seq_data, encodepath, args, config):
   resolution = config['resolution']
-  prob = np.load('data_info/distribution_info.npy' )
+  prob = np.load('data_info/distribution_info_{}.npy'.format(args.model_num))
 
   # Avoid zero prob
   modified_freq = prob * resolution + 1
@@ -99,8 +99,8 @@ def apply_range_encoder(seq_data, encodepath, config):
 
 
 
-def get_encodepath(image_path, image, seq_data, args, config):
-    encoded_save_dir = args.output_dir
+def get_encodepath(image_path, image, seq_data, args, config, encoded_patches_shape):
+    encoded_save_dir = args.output_dir.format(args.model_num)
     new_extension = '.encoded'
     filename_without_extension = image_path.split('/')[-1].replace('.png', '')
 
@@ -108,8 +108,14 @@ def get_encodepath(image_path, image, seq_data, args, config):
     seq_data_len = len(seq_data)
     height, width, channel = image.shape
 
+    encoded_height, encoded_width, encoded_channel = encoded_patches_shape
+
     name_sep = config['name_sep']
-    img_info = name_sep + '{}_{}_{}'.format(seq_data_len, height, width)
+    img_info = ''
+
+    img_info +=  name_sep + '{}_{}_{}'.format(encoded_height, encoded_width, encoded_channel)
+
+    img_info +=  name_sep + '{}_{}_{}'.format(seq_data_len, height, width)
 
     encodepath = str(Path(encoded_save_dir) / filename_without_extension) + img_info + new_extension
 
@@ -126,6 +132,8 @@ def compress(sess, model, args):
 
   print(config)
 
+  # bottleneck_channel = config['bottleneck_channel']
+
   data_list = args.data_list
   image_path_list = utils.read_image_list(data_list)
 
@@ -134,15 +142,17 @@ def compress(sess, model, args):
   patches_placeholder = tf.placeholder(tf.float32, shape=[None, patch_size, patch_size, 3])
   patch_batch, iterator = data_loader.get_patch_batch(batch_size, patches_placeholder)
 
-  encoder_output_op = model.encoder(patch_batch, patch_size)
+  quan_scale = config['quan_scale']
+
+  encoder_output_op = model.encoder(patch_batch, patch_size, quan_scale)
 
   utils.restore_params(sess, args)
 
 
   # To be paralleled
   for image_path in image_path_list:
-    image = cv2.imread(image_path)
-    image_patches = utils.crop_image_input_patches(image)
+    image = io.imread(image_path)
+    image_patches = utils.crop_image_input_patches(image, patch_size)
 
     sess.run(iterator.initializer, feed_dict={patches_placeholder: image_patches})
 
@@ -158,9 +168,22 @@ def compress(sess, model, args):
     # print(encoded_patches[0].shape)
     # print(encoded_patches[-1].shape)
 
-    seq_data = np.concatenate(encoded_patches).reshape(-1).astype(int).tolist()
+    encoded_patches_shape = encoded_patches[0][0].shape
 
-    encodepath = get_encodepath(image_path, image, seq_data, args, config)
+    # seq_data = np.concatenate(encoded_patches).reshape(-1).astype(int).tolist()
+
+    seq_data = np.concatenate(encoded_patches).reshape(-1, np.prod(encoded_patches_shape))
+
+    # print(seq_data.reshape(-1).shape[0])
+
+    # encoded_order = [int(i) for i in np.load('data_info/order_info_{}.npy'.format(args.model_num))]
+    # seq_data = [seq_data_item[encoded_order] for seq_data_item in seq_data]
+
+    seq_data = np.asarray(seq_data).reshape(-1).astype(int).tolist()
+
+    # print(len(seq_data))
+
+    encodepath = get_encodepath(image_path, image, seq_data, args, config, encoded_patches_shape)
 
     # print('np.concatenate(encoded_patches).shape: {}'.format(np.concatenate(encoded_patches).shape))
     # print('len(seq_data): {}'.format(len(seq_data)))
@@ -172,7 +195,11 @@ def compress(sess, model, args):
     # break
 
 
-    apply_range_encoder(seq_data, encodepath, config)
+    encoded_save_dir = args.output_dir.format(args.model_num)
+    if not os.path.exists(encoded_save_dir):
+      os.makedirs(encoded_save_dir)
+
+    apply_range_encoder(seq_data, encodepath, args, config)
 
     print('encodepath: {}'.format(encodepath))
     # print('Range coder encoded complete')
